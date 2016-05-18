@@ -17,8 +17,16 @@ nRep         = 20;                               % Number of repetition of the s
 interStimInt = 0.3;                             % Inter-stimulus interval (in second)
 % stimName     = ['PT_' num2str(F) '_linear2'];   % Stimulus name for save file
 fileDur = 30; % Wav file duration (in sec). Must not be >40sec at tdt100k for benware. ;
-savePath = 'F:\\Work\\Code\\Routines\\Stimuli\\';
-fileName = 'testTones';
+savePath = 'E:\\auditory-objects\\benware.stimuli\\tuningECOG_quentin\\';
+
+fileName = 'ecogTones';
+
+if length(dir(savePath)) > 2,
+    inp = input(['The save folder (' savePath ') is not empty.\nDo you wish to continue? [N/y]'],'s');
+    if isempty(inp) || strcpi(inp,'n'),
+        error('Interrupted by user')
+    end
+end
 
 % Create rampe
 ramptype = 'linear';
@@ -45,29 +53,26 @@ t = linspace( 0, nSec, nSec * Fs);
 c = 1;
 nStim = length(levels) * length(F);
 ToneMat = zeros(nStim,floor(nSec*Fs)+round(interStimInt*Fs));
-ToneNFO = zeros(nStim,4); % [Frequency Level Duration Inter-stim interval]
+ToneNFO = zeros(nStim,6); % [Frequency Level Duration Inter-stim interval]
 for f = F,
 
 % s  = amplitude * sin( 2 * pi * F * t );
 s  = sin( 2 * pi * f * t );
 
-% sound(s,Fs)
-
-
-% Apply rampe
+% Apply ramp
 s = s.*r;
 
-% interstimulus silence
-interStimV  = zeros(1,round(interStimInt*Fs));
-s        = [s interStimV];
-
 for l = levels,
-    ToneMat(c,:) = adjustRMSbenware(s,l,benwareRefRMS);
-    ToneNFO(c,:) = [f l nSec interStimInt];
+    ToneMat(c,1:floor(nSec*Fs)) = adjustRMSbenware(s,l); % Adjust dB level for benware system
+    ToneNFO(c,:) = [f l nSec floor(nSec*Fs) interStimInt round(interStimInt*Fs)];
     c = c+1;
 end
 
 end
+
+% interstimulus silence
+interStimV  = zeros(nStim,round(interStimInt*Fs));
+ToneMat(:,floor(nSec*Fs)+1:end) = interStimV;
 
 % Generate 30 sec stim files
 stimOrder = repmat(1:nStim,[1 nRep]);
@@ -79,20 +84,30 @@ nStimPerFile = fileDur/(nSec + interStimInt);
 
 stimInfo.stimOrder = stimOrder;
 stimInfo.stimInfo.info = ToneNFO;
-stimInfo.stimInfo.name = {'Frequency' 'Level' 'Duration' 'Inter-stim interval'};
+stimInfo.stimInfo.name = {'Frequency' 'Level' 'Stim Duration (ms)' 'Stim Duration (bin)' 'Inter-stim interval (ms)' 'Inter-stim interval (bin)'};
 stimInfo.fs = Fs;
 
 indS = [1 nStimPerFile];
-for i = 1:nFiles,
-    fid = fopen(sprintf([fileName '_%d.f32'],i),'w');
+for i = 1:nFiles-1,
+    fid = fopen(sprintf([savePath fileName '_%d.f32'],i),'w');
     for t = indS(1):indS(2),
         fwrite(fid,ToneMat(stimOrder(t),:),'float32');
     end
     localStimOrder = stimOrder(indS(1):indS(2));
     stimInfo.stimOrderF32.(sprintf([fileName '_%d'],i)) = localStimOrder;
     indS = indS + nStimPerFile;
-    stimInfo.stimOrder = stimOrder;
+    fclose(fid);
 end
+
+% last file
+i=i+1;
+fid = fopen(sprintf([savePath fileName '_%d.f32'],i),'w');
+for t = indS(1):length(stimOrder),
+    fwrite(fid,ToneMat(stimOrder(t),:),'float32');
+end
+localStimOrder = stimOrder(indS(1):length(stimOrder));
+stimInfo.stimOrderF32.(sprintf([fileName '_%d'],i)) = localStimOrder;
+fclose(fid);
 
 save([savePath fileName '_stimInfo'],'stimInfo');
 
